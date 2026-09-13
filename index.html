@@ -341,7 +341,7 @@ function pollFace(now){
 }
 
 /* ---------------- game state ---------------- */
-const ship = {x:170, y:GY, vy:0, w:62, h:30, grounded:true, inv:0, tilt:0};
+const ship = {x:170, y:GY, vy:0, w:62, h:30, grounded:true, inv:0, tilt:0, falling:false};
 let bullets=[], rockets=[], obstacles=[], ufos=[], bombs=[], bits=[], stars=[], ridge=[];
 let dist=0, score=0, lives=3, speed=4.4, nextSpawn=600, ufoTimer=4200;
 let state='title', last=0, shake=0, best=0;
@@ -358,7 +358,7 @@ function seedWorld(){
 function reset(){
   bullets=[];rockets=[];obstacles=[];ufos=[];bombs=[];bits=[];
   dist=0;score=0;lives=3;speed=4.4;nextSpawn=700;ufoTimer=4200;
-  ship.y=GY;ship.vy=0;ship.grounded=true;ship.inv=1200;ship.tilt=0;
+  ship.y=GY;ship.vy=0;ship.grounded=true;ship.inv=1200;ship.tilt=0;ship.falling=false;
   seedWorld();
 }
 
@@ -405,7 +405,7 @@ function crash(){
   shake = 16;
   lives--;
   if(lives<=0){ gameOver(); return; }
-  ship.y = GY - 120; ship.vy = 0; ship.grounded=false; ship.inv = 1600;
+  ship.y = GY - 120; ship.vy = 0; ship.grounded=false; ship.inv = 1600; ship.falling = false;
   // clear the road just ahead so the respawn is fair
   obstacles = obstacles.filter(o => o.x > ship.x+260 || o.x+ (o.w||0) < ship.x-60);
   bombs = [];
@@ -432,14 +432,23 @@ function update(dt){
   ship.vy += 0.62*k;
   ship.y += ship.vy*k;
   const centre = ship.x + ship.w/2;
-  const overGap = gapAt(centre);
-  if(!overGap && ship.y >= GY && ship.vy >= 0){
+  // during the respawn grace period craters are bridged, so the player isn't killed on arrival
+  const solidBelow = !gapAt(centre) || ship.inv > 0;
+
+  if(ship.falling){
+    // committed: the ground scrolling past can no longer rescue it
+    ship.grounded = false;
+    if(ship.y > GY + 44) crash();
+  } else if(!solidBelow && ship.y >= GY - 4){
+    // drove into the crater at rim height
+    ship.falling = true; ship.grounded = false; shake = 6;
+    ship.vy = Math.max(ship.vy, 5);
+  } else if(solidBelow && ship.y >= GY && ship.vy >= 0){
     ship.y = GY; ship.vy = 0; ship.grounded = true;
   } else {
     ship.grounded = false;
   }
   ship.tilt = Math.max(-0.28, Math.min(0.3, ship.vy*0.018));
-  if(ship.y > GY + 110){ ship.y = GY; ship.vy=0; crash(); }
 
   // world scroll
   nextSpawn -= speed*k;
